@@ -17,10 +17,12 @@ import com.squareup.moshi.Types
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -49,12 +51,14 @@ class AltTextGenerator @Inject constructor(
         try {
             val bytes = loadAndEncode(imageUri)
             generateFromBytes(bytes)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(ImageLoadException(e))
         }
     }
 
-    /** Visible for testing. */
+    @androidx.annotation.VisibleForTesting
     internal suspend fun generateFromBytes(jpegBytes: ByteArray): Result<String> {
         val key = prefs.getString(PrefKeys.ALT_TEXT_API_KEY, "").orEmpty()
         val model = prefs.getString(PrefKeys.ALT_TEXT_MODEL, "").orEmpty()
@@ -85,15 +89,18 @@ class AltTextGenerator @Inject constructor(
             )
         )
         val requestJson = moshi.adapter(ChatCompletionRequest::class.java).toJson(request)
+        val client = httpClient.newBuilder()
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .build()
         val httpRequest = Request.Builder()
             .url(joinUrl(baseUrl, "chat/completions"))
             .header("Authorization", "Bearer $key")
-            .header("Content-Type", "application/json")
             .post(requestJson.toRequestBody(JSON))
             .build()
 
         return try {
-            val response = httpClient.newCall(httpRequest).await()
+            val response = client.newCall(httpRequest).await()
             response.use { handleResponse(it) }
         } catch (e: IOException) {
             Result.failure(NetworkException(e))
@@ -115,7 +122,7 @@ class AltTextGenerator @Inject constructor(
         }
         val message = parsed?.choices?.firstOrNull()?.message
             ?: return Result.failure(EmptyResponseException())
-        val text = extractText(message.content).trim().trim('"')
+        val text = extractText(message.content).trim().stripWrappingQuotes()
         return if (text.isEmpty()) {
             Result.failure(EmptyResponseException())
         } else {
@@ -148,10 +155,13 @@ class AltTextGenerator @Inject constructor(
             .get()
         return try {
             val resized = resizeIfNeeded(bitmap)
-            val output = ByteArrayOutputStream()
-            resized.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
-            if (resized !== bitmap) resized.recycle()
-            output.toByteArray()
+            try {
+                val output = ByteArrayOutputStream()
+                resized.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
+                output.toByteArray()
+            } finally {
+                if (resized !== bitmap) resized.recycle()
+            }
         } finally {
             bitmap.recycle()
         }
@@ -185,6 +195,9 @@ class AltTextGenerator @Inject constructor(
         }
     }
 }
+
+private fun String.stripWrappingQuotes(): String =
+    if (length >= 2 && startsWith('"') && endsWith('"')) substring(1, length - 1) else this
 
 private suspend fun Call.await(): Response =
     suspendCancellableCoroutine { cont ->
