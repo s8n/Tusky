@@ -23,6 +23,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
+import android.widget.Button
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.core.os.bundleOf
@@ -92,6 +93,8 @@ class CaptionDialog : DialogFragment() {
         binding.imageDescriptionLayout.counterMaxLength = descriptionLimit
 
         isCancelable = false
+
+        // Dialog is full screen anyway. But without this, taps in navbar while keyboard is up can dismiss the dialog.
         dialog?.setCanceledOnTouchOutside(false)
 
         val previewUri = arguments?.getParcelableCompat<Uri>(PREVIEW_URI_ARG) ?: error("Preview Uri is null")
@@ -104,6 +107,7 @@ class CaptionDialog : DialogFragment() {
             }
         }
 
+        // Load the image and manually set it into the ImageView because it doesn't have a fixed size.
         Glide.with(this)
             .load(previewUri)
             .downsample(DownsampleStrategy.CENTER_INSIDE)
@@ -144,7 +148,7 @@ class CaptionDialog : DialogFragment() {
 
     private fun startGeneration(uri: Uri) {
         if (generationJob?.isActive == true) return
-        val alertDialog = dialog as AlertDialog
+        val alertDialog = (dialog as? AlertDialog) ?: return
         val okButton = alertDialog.getButton(AlertDialog.BUTTON_POSITIVE)
         val cancelButton = alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE)
         val originalCancelText = cancelButton.text
@@ -158,8 +162,10 @@ class CaptionDialog : DialogFragment() {
         generationJob = lifecycleScope.launch {
             try {
                 val result = altTextGenerator.generate(uri)
-                result.onSuccess { binding.imageDescriptionText.setText(it) }
-                    .onFailure { showError(it) }
+                if (isAdded) {
+                    result.onSuccess { binding.imageDescriptionText.setText(it) }
+                        .onFailure { showError(it) }
+                }
             } catch (_: CancellationException) {
                 // user cancelled — silent, just restore UI
             } finally {
@@ -188,8 +194,8 @@ class CaptionDialog : DialogFragment() {
     }
 
     private fun restoreUi(
-        okButton: android.widget.Button,
-        cancelButton: android.widget.Button,
+        okButton: Button,
+        cancelButton: Button,
         originalCancelText: CharSequence
     ) {
         binding.generateAltTextProgress.visibility = View.GONE
@@ -200,7 +206,7 @@ class CaptionDialog : DialogFragment() {
         attachDefaultCancelHandler(cancelButton)
     }
 
-    private fun attachDefaultCancelHandler(cancelButton: android.widget.Button) {
+    private fun attachDefaultCancelHandler(cancelButton: Button) {
         cancelButton.setOnClickListener {
             if (arguments?.getString(EXISTING_DESCRIPTION_ARG).orEmpty() !=
                 binding.imageDescriptionText.text.toString()
