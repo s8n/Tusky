@@ -52,6 +52,14 @@ const val SCHEMA_VERSION = 2025032401
 /** The schema version for fresh installs */
 const val NEW_INSTALL_SCHEMA_VERSION = 0
 
+const val ALT_TEXT_DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
+const val ALT_TEXT_DEFAULT_MODEL = "qwen/qwen3.5-122b-a10b"
+const val ALT_TEXT_DEFAULT_PROMPT =
+    "Write alt text for this image. Be concise — 1-2 sentences for simple images. " +
+        "If the image contains readable text, transcribe it rather than describing it. " +
+        "Only describe what you can clearly see; do not guess at names or details."
+const val ALT_TEXT_DEFAULT_MAX_TOKENS = 1024
+
 object PrefKeys {
     // Note: not all of these keys are actually used as SharedPreferences keys but we must give
     // each preference a key for it to work.
@@ -87,6 +95,12 @@ object PrefKeys {
     const val HTTP_PROXY_ENABLED = "httpProxyEnabled"
     const val HTTP_PROXY_SERVER = "httpProxyServer"
     const val HTTP_PROXY_PORT = "httpProxyPort"
+
+    const val ALT_TEXT_API_KEY = "altTextApiKey"
+    const val ALT_TEXT_BASE_URL = "altTextBaseUrl"
+    const val ALT_TEXT_MODEL = "altTextModel"
+    const val ALT_TEXT_PROMPT = "altTextPrompt"
+    const val ALT_TEXT_MAX_TOKENS = "altTextMaxTokens"
 
     const val DEFAULT_POST_PRIVACY = "defaultPostPrivacy"
     const val DEFAULT_POST_LANGUAGE = "defaultPostLanguage"
