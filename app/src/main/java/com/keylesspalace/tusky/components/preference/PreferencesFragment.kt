@@ -297,6 +297,14 @@ class PreferencesFragment : BasePreferencesFragment() {
                     summaryProvider = ProxyPreferencesFragment.SummaryProvider
                 }
             }
+
+            preferenceCategory(R.string.pref_title_alt_text_generation) {
+                preference {
+                    setTitle(R.string.pref_title_alt_text_generation)
+                    fragment = AltTextPreferencesFragment::class.qualifiedName
+                    summaryProvider = AltTextPreferencesFragment.SummaryProvider
+                }
+            }
         }
     }
 
