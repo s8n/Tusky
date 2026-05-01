@@ -16,33 +16,41 @@
 package com.keylesspalace.tusky.components.compose.alttext
 
 import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
 
+@JsonClass(generateAdapter = true)
 internal data class ChatCompletionRequest(
     val model: String,
     @Json(name = "max_tokens") val maxTokens: Int,
     val messages: List<RequestMessage>
 )
 
+@JsonClass(generateAdapter = true)
 internal data class RequestMessage(
     val role: String,
     val content: List<ContentPart>
 )
 
+@JsonClass(generateAdapter = true)
 internal data class ContentPart(
     val type: String,
     val text: String? = null,
     @Json(name = "image_url") val imageUrl: ImageUrl? = null
 )
 
+@JsonClass(generateAdapter = true)
 internal data class ImageUrl(val url: String)
 
+@JsonClass(generateAdapter = true)
 internal data class ChatCompletionResponse(
     val choices: List<Choice>?,
     val error: ApiError?
 )
 
+@JsonClass(generateAdapter = true)
 internal data class Choice(val message: ResponseMessage?)
 
+@JsonClass(generateAdapter = true)
 internal data class ResponseMessage(
     /**
      * Some providers return a plain string; some return a JSON array of typed parts. We accept
@@ -51,4 +59,5 @@ internal data class ResponseMessage(
     val content: Any?
 )
 
+@JsonClass(generateAdapter = true)
 internal data class ApiError(val message: String?)
