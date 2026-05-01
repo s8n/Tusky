@@ -88,6 +88,15 @@ inline fun PreferenceParent.validatedEditTextPreference(
     return pref
 }
 
+inline fun PreferenceParent.editTextPreference(
+    builder: EditTextPreference.() -> Unit
+): EditTextPreference {
+    val pref = EditTextPreference(context)
+    builder(pref)
+    addPref(pref)
+    return pref
+}
+
 inline fun PreferenceParent.preferenceCategory(
     @StringRes title: Int? = null,
     builder: PreferenceParent.(PreferenceCategory) -> Unit
