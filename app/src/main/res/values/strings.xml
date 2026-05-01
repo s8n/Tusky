@@ -1018,4 +1018,22 @@
     <string name="error_remove_quote">Failed to remove quote from post.</string>
 
     <string name="quote_hidden_by_filter">Post hidden due to one of your filters</string>
+
+    <!-- Alt text generation -->
+    <string name="pref_title_alt_text_generation">Alt text generation</string>
+    <string name="pref_summary_alt_text_not_configured">Not configured</string>
+    <string name="pref_title_alt_text_api_key">API key</string>
+    <string name="pref_summary_alt_text_api_key_set">Set</string>
+    <string name="pref_summary_alt_text_api_key_not_set">Not set</string>
+    <string name="pref_title_alt_text_base_url">Base URL</string>
+    <string name="pref_title_alt_text_model">Model</string>
+    <string name="pref_title_alt_text_prompt">Prompt</string>
+    <string name="pref_title_alt_text_max_tokens">Max tokens</string>
+    <string name="action_generate_alt_text">Generate alt text</string>
+    <string name="action_cancel_generation">Cancel generation</string>
+    <string name="error_alt_text_load_image">Could not load image</string>
+    <string name="error_alt_text_no_text">Model returned no text</string>
+    <string name="error_alt_text_server">Server error (HTTP %1$d)</string>
+    <string name="error_alt_text_network">Could not connect</string>
+    <string name="error_alt_text_not_configured">Configure alt text generation in Settings</string>
 </resources>
