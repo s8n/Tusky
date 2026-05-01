@@ -28,23 +28,33 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.os.bundleOf
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.DialogFragment
+import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.DownsampleStrategy
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import com.keylesspalace.tusky.R
+import com.keylesspalace.tusky.components.compose.alttext.AltTextGenerator
 import com.keylesspalace.tusky.components.instanceinfo.InstanceInfoRepository.Companion.DEFAULT_MEDIA_DESCRIPTION_LIMIT
 import com.keylesspalace.tusky.databinding.DialogImageDescriptionBinding
 import com.keylesspalace.tusky.util.getParcelableCompat
 import com.keylesspalace.tusky.util.hide
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class CaptionDialog : DialogFragment() {
     private lateinit var listener: Listener
-
     private lateinit var binding: DialogImageDescriptionBinding
-
     private var animatable: Animatable? = null
+    private var generationJob: Job? = null
+
+    @Inject lateinit var altTextGenerator: AltTextGenerator
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val localId = arguments?.getInt(LOCAL_ID_ARG) ?: error("Missing localId")
@@ -73,7 +83,6 @@ class CaptionDialog : DialogFragment() {
         }
 
         binding.imageDescriptionText.hint = getString(R.string.hint_describe_for_visually_impaired)
-
         binding.imageDescriptionText.setText(arguments?.getString(EXISTING_DESCRIPTION_ARG))
 
         savedInstanceState?.getCharSequence(DESCRIPTION_KEY)?.let {
@@ -83,13 +92,18 @@ class CaptionDialog : DialogFragment() {
         binding.imageDescriptionLayout.counterMaxLength = descriptionLimit
 
         isCancelable = false
-
-        // Dialog is full screen anyway. But without this, taps in navbar while keyboard is up can dismiss the dialog.
         dialog?.setCanceledOnTouchOutside(false)
 
         val previewUri = arguments?.getParcelableCompat<Uri>(PREVIEW_URI_ARG) ?: error("Preview Uri is null")
+        val isImage = arguments?.getBoolean(IS_IMAGE_ARG, false) ?: false
 
-        // Load the image and manually set it into the ImageView because it doesn't have a fixed size.
+        if (isImage && altTextGenerator.isConfigured()) {
+            binding.generateAltTextContainer.visibility = View.VISIBLE
+            binding.generateAltTextButton.setOnClickListener {
+                startGeneration(previewUri)
+            }
+        }
+
         Glide.with(this)
             .load(previewUri)
             .downsample(DownsampleStrategy.CENTER_INSIDE)
@@ -107,11 +121,9 @@ class CaptionDialog : DialogFragment() {
                             override fun invalidateDrawable(who: Drawable) {
                                 imageView.invalidate()
                             }
-
                             override fun scheduleDrawable(who: Drawable, what: Runnable, `when`: Long) {
                                 imageView.postDelayed(what, `when`)
                             }
-
                             override fun unscheduleDrawable(who: Drawable, what: Runnable) {
                                 imageView.removeCallbacks(what)
                             }
@@ -130,11 +142,86 @@ class CaptionDialog : DialogFragment() {
         return binding.root
     }
 
+    private fun startGeneration(uri: Uri) {
+        if (generationJob?.isActive == true) return
+        val alertDialog = dialog as AlertDialog
+        val okButton = alertDialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        val cancelButton = alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+        val originalCancelText = cancelButton.text
+
+        binding.generateAltTextButton.visibility = View.GONE
+        binding.generateAltTextProgress.visibility = View.VISIBLE
+        okButton.isEnabled = false
+        cancelButton.text = getString(R.string.action_cancel_generation)
+        cancelButton.setOnClickListener { generationJob?.cancel() }
+
+        generationJob = lifecycleScope.launch {
+            try {
+                val result = altTextGenerator.generate(uri)
+                result.onSuccess { binding.imageDescriptionText.setText(it) }
+                    .onFailure { showError(it) }
+            } catch (_: CancellationException) {
+                // user cancelled — silent, just restore UI
+            } finally {
+                if (isAdded) restoreUi(okButton, cancelButton, originalCancelText)
+            }
+        }
+    }
+
+    private fun showError(throwable: Throwable) {
+        val msg = when (throwable) {
+            is AltTextGenerator.NotConfiguredException ->
+                getString(R.string.error_alt_text_not_configured)
+            is AltTextGenerator.ImageLoadException ->
+                getString(R.string.error_alt_text_load_image)
+            is AltTextGenerator.NetworkException ->
+                getString(R.string.error_alt_text_network)
+            is AltTextGenerator.ServerHttpException ->
+                getString(R.string.error_alt_text_server, throwable.code)
+            is AltTextGenerator.UpstreamErrorException ->
+                throwable.message ?: getString(R.string.error_alt_text_network)
+            is AltTextGenerator.EmptyResponseException ->
+                getString(R.string.error_alt_text_no_text)
+            else -> throwable.message ?: getString(R.string.error_alt_text_network)
+        }
+        Snackbar.make(binding.root, msg, Snackbar.LENGTH_LONG).show()
+    }
+
+    private fun restoreUi(
+        okButton: android.widget.Button,
+        cancelButton: android.widget.Button,
+        originalCancelText: CharSequence
+    ) {
+        binding.generateAltTextProgress.visibility = View.GONE
+        binding.generateAltTextButton.visibility = View.VISIBLE
+        okButton.isEnabled = (binding.imageDescriptionText.text?.length ?: 0) <=
+            binding.imageDescriptionLayout.counterMaxLength
+        cancelButton.text = originalCancelText
+        attachDefaultCancelHandler(cancelButton)
+    }
+
+    private fun attachDefaultCancelHandler(cancelButton: android.widget.Button) {
+        cancelButton.setOnClickListener {
+            if (arguments?.getString(EXISTING_DESCRIPTION_ARG).orEmpty() !=
+                binding.imageDescriptionText.text.toString()
+            ) {
+                MaterialAlertDialogBuilder(requireContext())
+                    .setMessage(R.string.confirm_dismiss_caption)
+                    .setPositiveButton(R.string.yes) { _, _ -> dialog?.dismiss() }
+                    .setNegativeButton(R.string.no, null)
+                    .show()
+            } else {
+                dialog?.dismiss()
+            }
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         val descriptionLimit = arguments?.getInt(DESCRIPTION_LIMIT_ARG) ?: DEFAULT_MEDIA_DESCRIPTION_LIMIT
-        binding.imageDescriptionText.doOnTextChanged { newText, _, _, _, ->
-            (dialog as AlertDialog?)?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = (newText?.length ?: 0) <= descriptionLimit
+        binding.imageDescriptionText.doOnTextChanged { newText, _, _, _ ->
+            (dialog as AlertDialog?)?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled =
+                (newText?.length ?: 0) <= descriptionLimit && generationJob?.isActive != true
         }
         dialog?.apply {
             window?.setLayout(
@@ -143,19 +230,7 @@ class CaptionDialog : DialogFragment() {
             )
             window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
-        (dialog as AlertDialog?)?.getButton(AlertDialog.BUTTON_NEGATIVE)?.setOnClickListener {
-            if (arguments?.getString(EXISTING_DESCRIPTION_ARG).orEmpty() != binding.imageDescriptionText.text.toString()) {
-                MaterialAlertDialogBuilder(requireContext())
-                    .setMessage(R.string.confirm_dismiss_caption)
-                    .setPositiveButton(R.string.yes) { _, _ ->
-                        dialog?.dismiss()
-                    }
-                    .setNegativeButton(R.string.no, null)
-                    .show()
-            } else {
-                dialog?.dismiss()
-            }
-        }
+        attachDefaultCancelHandler((dialog as AlertDialog).getButton(AlertDialog.BUTTON_NEGATIVE))
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -170,6 +245,7 @@ class CaptionDialog : DialogFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        generationJob?.cancel()
         animatable?.stop()
         (animatable as? Drawable?)?.callback = null
     }
@@ -183,21 +259,23 @@ class CaptionDialog : DialogFragment() {
             localId: Int,
             existingDescription: String?,
             previewUri: Uri,
-            descriptionLimit: Int
-        ) =
-            CaptionDialog().apply {
-                arguments = bundleOf(
-                    LOCAL_ID_ARG to localId,
-                    EXISTING_DESCRIPTION_ARG to existingDescription,
-                    PREVIEW_URI_ARG to previewUri,
-                    DESCRIPTION_LIMIT_ARG to descriptionLimit
-                )
-            }
+            descriptionLimit: Int,
+            isImage: Boolean
+        ) = CaptionDialog().apply {
+            arguments = bundleOf(
+                LOCAL_ID_ARG to localId,
+                EXISTING_DESCRIPTION_ARG to existingDescription,
+                PREVIEW_URI_ARG to previewUri,
+                DESCRIPTION_LIMIT_ARG to descriptionLimit,
+                IS_IMAGE_ARG to isImage
+            )
+        }
 
         private const val DESCRIPTION_KEY = "description"
         private const val EXISTING_DESCRIPTION_ARG = "existing_description"
         private const val PREVIEW_URI_ARG = "preview_uri"
         private const val LOCAL_ID_ARG = "local_id"
         private const val DESCRIPTION_LIMIT_ARG = "description_limit"
+        private const val IS_IMAGE_ARG = "is_image"
     }
 }

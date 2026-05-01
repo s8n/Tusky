@@ -297,7 +297,8 @@ class ComposeActivity :
                     item.localId,
                     item.description,
                     item.uri,
-                    mediaDescriptionLimit
+                    mediaDescriptionLimit,
+                    item.type == QueuedMedia.Type.IMAGE
                 ).show(supportFragmentManager, "caption_dialog")
             },
             onAddFocus = { item ->
