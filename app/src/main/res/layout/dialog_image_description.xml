@@ -17,8 +17,8 @@
         android:layout_weight="1"
         android:contentDescription="@string/post_media_image" />
 
-    <FrameLayout
-        android:id="@+id/generateAltTextContainer"
+    <ProgressBar
+        android:id="@+id/generateAltTextProgress"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="end"
@@ -26,23 +26,7 @@
         android:layout_marginTop="?dialogPreferredPadding"
         android:layout_marginEnd="?dialogPreferredPadding"
         android:visibility="gone"
-        tools:visibility="visible">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/generateAltTextButton"
-            style="?attr/materialButtonOutlinedStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/action_generate_alt_text" />
-
-        <ProgressBar
-            android:id="@+id/generateAltTextProgress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:visibility="gone"
-            tools:visibility="visible" />
-    </FrameLayout>
+        tools:visibility="visible" />
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/imageDescriptionLayout"

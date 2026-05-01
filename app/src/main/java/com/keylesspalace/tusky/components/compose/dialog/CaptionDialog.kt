@@ -70,6 +70,7 @@ class CaptionDialog : DialogFragment() {
                 listener.onUpdateDescription(localId, binding.imageDescriptionText.text.toString())
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.action_generate_alt_text, null)
             .create()
     }
 
@@ -98,14 +99,6 @@ class CaptionDialog : DialogFragment() {
         dialog?.setCanceledOnTouchOutside(false)
 
         val previewUri = arguments?.getParcelableCompat<Uri>(PREVIEW_URI_ARG) ?: error("Preview Uri is null")
-        val isImage = arguments?.getBoolean(IS_IMAGE_ARG, false) ?: false
-
-        if (isImage && altTextGenerator.isConfigured()) {
-            binding.generateAltTextContainer.visibility = View.VISIBLE
-            binding.generateAltTextButton.setOnClickListener {
-                startGeneration(previewUri)
-            }
-        }
 
         // Load the image and manually set it into the ImageView because it doesn't have a fixed size.
         Glide.with(this)
@@ -151,9 +144,10 @@ class CaptionDialog : DialogFragment() {
         val alertDialog = (dialog as? AlertDialog) ?: return
         val okButton = alertDialog.getButton(AlertDialog.BUTTON_POSITIVE)
         val cancelButton = alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+        val neutralButton = alertDialog.getButton(AlertDialog.BUTTON_NEUTRAL)
         val originalCancelText = cancelButton.text
 
-        binding.generateAltTextButton.visibility = View.GONE
+        neutralButton.isEnabled = false
         binding.generateAltTextProgress.visibility = View.VISIBLE
         okButton.isEnabled = false
         cancelButton.text = getString(R.string.action_cancel_generation)
@@ -169,7 +163,7 @@ class CaptionDialog : DialogFragment() {
             } catch (_: CancellationException) {
                 // user cancelled — silent, just restore UI
             } finally {
-                if (isAdded) restoreUi(okButton, cancelButton, originalCancelText)
+                if (isAdded) restoreUi(okButton, cancelButton, neutralButton, originalCancelText)
             }
         }
     }
@@ -196,10 +190,11 @@ class CaptionDialog : DialogFragment() {
     private fun restoreUi(
         okButton: Button,
         cancelButton: Button,
+        neutralButton: Button,
         originalCancelText: CharSequence
     ) {
         binding.generateAltTextProgress.visibility = View.GONE
-        binding.generateAltTextButton.visibility = View.VISIBLE
+        neutralButton.isEnabled = true
         okButton.isEnabled = (binding.imageDescriptionText.text?.length ?: 0) <=
             binding.imageDescriptionLayout.counterMaxLength
         cancelButton.text = originalCancelText
@@ -236,7 +231,17 @@ class CaptionDialog : DialogFragment() {
             )
             window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
-        attachDefaultCancelHandler((dialog as AlertDialog).getButton(AlertDialog.BUTTON_NEGATIVE))
+        val alertDialog = dialog as AlertDialog
+        attachDefaultCancelHandler(alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE))
+
+        val neutralButton = alertDialog.getButton(AlertDialog.BUTTON_NEUTRAL)
+        val previewUri = arguments?.getParcelableCompat<Uri>(PREVIEW_URI_ARG)
+        val isImage = arguments?.getBoolean(IS_IMAGE_ARG, false) ?: false
+        if (previewUri != null && isImage && altTextGenerator.isConfigured()) {
+            neutralButton.setOnClickListener { startGeneration(previewUri) }
+        } else {
+            neutralButton.visibility = View.GONE
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
