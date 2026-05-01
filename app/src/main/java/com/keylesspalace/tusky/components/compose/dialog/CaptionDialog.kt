@@ -147,7 +147,7 @@ class CaptionDialog : DialogFragment() {
         val neutralButton = alertDialog.getButton(AlertDialog.BUTTON_NEUTRAL)
         val originalCancelText = cancelButton.text
 
-        neutralButton.isEnabled = false
+        neutralButton.visibility = View.GONE
         binding.generateAltTextProgress.visibility = View.VISIBLE
         okButton.isEnabled = false
         cancelButton.text = getString(R.string.action_cancel_generation)
@@ -194,7 +194,7 @@ class CaptionDialog : DialogFragment() {
         originalCancelText: CharSequence
     ) {
         binding.generateAltTextProgress.visibility = View.GONE
-        neutralButton.isEnabled = true
+        neutralButton.visibility = View.VISIBLE
         okButton.isEnabled = (binding.imageDescriptionText.text?.length ?: 0) <=
             binding.imageDescriptionLayout.counterMaxLength
         cancelButton.text = originalCancelText
