@@ -148,22 +148,20 @@ class AltTextGenerator @Inject constructor(
     }
 
     private fun loadAndEncode(uri: Uri): ByteArray {
+        // Don't recycle the bitmap returned by Glide - it may still live in Glide's memory cache
+        // and recycling it makes subsequent loads of the same Uri return a recycled bitmap.
         val bitmap: Bitmap = Glide.with(context)
             .asBitmap()
             .load(uri)
             .submit()
             .get()
+        val resized = resizeIfNeeded(bitmap)
         return try {
-            val resized = resizeIfNeeded(bitmap)
-            try {
-                val output = ByteArrayOutputStream()
-                resized.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
-                output.toByteArray()
-            } finally {
-                if (resized !== bitmap) resized.recycle()
-            }
+            val output = ByteArrayOutputStream()
+            resized.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
+            output.toByteArray()
         } finally {
-            bitmap.recycle()
+            if (resized !== bitmap) resized.recycle()
         }
     }
 
