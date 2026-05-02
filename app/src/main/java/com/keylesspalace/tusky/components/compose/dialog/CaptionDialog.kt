@@ -151,7 +151,12 @@ class CaptionDialog : DialogFragment() {
         binding.generateAltTextProgress.visibility = View.VISIBLE
         okButton.isEnabled = false
         cancelButton.text = getString(R.string.action_cancel_generation)
-        cancelButton.setOnClickListener { generationJob?.cancel() }
+        cancelButton.setOnClickListener {
+            generationJob?.cancel()
+            // Restore UI synchronously rather than waiting for the coroutine's `finally`,
+            // which can be delayed (or skipped) while the OkHttp call or Glide load wind down.
+            restoreUi(okButton, cancelButton, neutralButton, originalCancelText)
+        }
 
         generationJob = lifecycleScope.launch {
             try {
