@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Base64
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.resource.bitmap.DownsampleStrategy
 import com.keylesspalace.tusky.settings.ALT_TEXT_DEFAULT_BASE_URL
 import com.keylesspalace.tusky.settings.ALT_TEXT_DEFAULT_MAX_TOKENS
 import com.keylesspalace.tusky.settings.ALT_TEXT_DEFAULT_MODEL
@@ -153,7 +154,8 @@ class AltTextGenerator @Inject constructor(
         val bitmap: Bitmap = Glide.with(context)
             .asBitmap()
             .load(uri)
-            .submit()
+            .downsample(DownsampleStrategy.AT_MOST)
+            .submit(MAX_SIDE, MAX_SIDE)
             .get()
         val resized = resizeIfNeeded(bitmap)
         return try {
