@@ -83,10 +83,19 @@ The companion DTO file `AltTextDtos.kt` declares `internal data class` types for
 
 ### Image pipeline (`Dispatchers.IO`)
 
-1. Load via Glide: `Glide.with(context).asBitmap().load(uri).submit().get()`. This reuses Tusky's Glide configuration and handles content URIs and EXIF rotation. Blocking is fine inside `withContext(Dispatchers.IO)`.
-2. If `max(width, height) > 1024`, scale down with `Bitmap.createScaledBitmap` preserving aspect ratio. Smaller images are sent at native size (no upscaling).
+1. Load via Glide, asking the decoder to subsample during decode rather than allocating the full-resolution bitmap:
+   ```kotlin
+   Glide.with(context)
+       .asBitmap()
+       .load(uri)
+       .downsample(DownsampleStrategy.AT_MOST)
+       .submit(MAX_SIDE, MAX_SIDE)
+       .get()
+   ```
+   This reuses Tusky's Glide configuration and handles content URIs and EXIF rotation. Blocking is fine inside `withContext(Dispatchers.IO)`. `AT_MOST` uses `inSampleSize` (powers of 2), preserves aspect ratio, and never upscales — so a 4032×3024 phone photo decodes as ~1008×756 instead of allocating ~50 MB.
+2. If `max(width, height) > 1024` (rare, since Glide already did most of the work), refine with `Bitmap.createScaledBitmap` preserving aspect ratio. Smaller images are sent at native size (no upscaling).
 3. Re-encode JPEG at quality 85 to a `ByteArrayOutputStream`; base64-encode (`Base64.NO_WRAP`).
-4. **Bitmap lifecycle:** the original bitmap is recycled in an outer `finally`, the resized bitmap (when distinct from the original) is recycled in an inner `finally` that wraps `compress()`. This ensures both are recycled even if `compress` throws.
+4. **Bitmap lifecycle:** the bitmap returned by `Glide.submit().get()` is **not** recycled — it may still live in Glide's memory cache, and recycling it makes subsequent loads of the same `Uri` return a recycled bitmap (surfaced as the misleading `ImageLoadException` → "Could not load image" snackbar). Only the resized bitmap, when distinct from the Glide-owned one, is recycled — in a `finally` that wraps `compress()` so it runs even if compression throws.
 
 ### Request
 
@@ -160,7 +169,7 @@ The image preview is wrapped in a `FrameLayout` so the spinner can overlay it wi
   2. `neutralButton.visibility = View.GONE` (hide, don't disable — keeps the button row uncluttered).
   3. Show the overlay progress bar.
   4. Disable OK.
-  5. Replace Cancel button text with `@string/action_cancel_generation`; replace its click listener with `generationJob?.cancel()`.
+  5. Replace Cancel button text with `@string/action_cancel_generation`; replace its click listener with a handler that calls `generationJob?.cancel()` **and** invokes `restoreUi(...)` synchronously. Doing the UI restore on the click — not relying on the coroutine's `finally` — is necessary because `finally` can be slow to run (or fail to run promptly) while the OkHttp call and Glide load wind down, leaving the dialog stuck in spinner state. `restoreUi` is idempotent, so the eventual `finally` running again is harmless.
   6. `lifecycleScope.launch { try { ... } catch (CancellationException) { /* silent */ } finally { if (isAdded) restoreUi(...) } }`.
   7. The success/failure result handling is also guarded by `isAdded` to avoid touching a detached fragment's binding.
 - `restoreUi` re-shows the neutral button, hides the spinner, re-enables OK based on description length, restores the cancel button text and re-attaches the default cancel handler.
