@@ -62,11 +62,17 @@ class AltTextGenerator @Inject constructor(
     private val httpClient: OkHttpClient,
     private val moshi: Moshi,
 ) {
-    suspend fun generate(imageUri: Uri): Result<String>
+    suspend fun generate(imageUri: Uri): Result<GenerationResult>
     fun isConfigured(): Boolean
 
     @VisibleForTesting
-    internal suspend fun generateFromBytes(jpegBytes: ByteArray): Result<String>
+    internal suspend fun generateFromBytes(jpegBytes: ByteArray): Result<GenerationResult>
+
+    data class GenerationResult(
+        val text: String,
+        val cost: Double? = null,
+        val provider: String? = null,
+    )
 
     class NotConfiguredException : Exception()
     class ImageLoadException(cause: Throwable) : Exception(cause)
@@ -130,6 +136,19 @@ Take `choices[0].message.content`. The DTO declares `content: Any?` because some
 Trim whitespace, then strip a wrapping pair of double quotes (only when both leading and trailing quotes are present, to avoid mangling content like `"Hello", she said`). Empty content produces a `EmptyResponseException` failure.
 
 For non-2xx responses, parse the body as a `ChatCompletionResponse` and prefer `error.message` (OpenRouter / OpenAI style). If the body is unparseable, fall back to `ServerHttpException(response.code)`.
+
+### Cost / provider reporting
+
+`generate()` returns `Result<GenerationResult>`, where `GenerationResult` is `(text: String, cost: Double?, provider: String?)`. Both metadata fields are nullable because not every OpenAI-compatible server returns them — OpenRouter populates `usage.cost` (USD) and a top-level `provider` string; vanilla OpenAI does not. The DTO has `Usage(cost: Double? = null)` and `provider: String? = null` on `ChatCompletionResponse`, both with defaults so missing fields don't fail Moshi. We do not add `usage: { include: true }` to the request — it isn't needed for OpenRouter in non-streaming mode and would be a foreign field for stricter servers.
+
+`CaptionDialog` shows a Snackbar after a successful generation if either `provider` or `cost` is non-null:
+
+- Format: `Provider: <name> · Cost: $0.0042` (either half can be omitted; if both null, no Snackbar).
+- Cost formatting matches the reference web client: `$0` when zero; otherwise `$` followed by `Locale.ROOT`-formatted decimals — 4 digits when ≥ 0.01, 5 digits when ≥ 0.001, 6 digits below. This avoids locale-dependent decimal separators (no `0,0042` in DE locale) and keeps OpenRouter's USD pricing visually unambiguous.
+- The Snackbar is in addition to setting the description text — the text replacement still happens silently first.
+- **Position and duration:** anchored to the **top** of the dialog (default Snackbar gravity is bottom; we cast `snackbar.view.layoutParams as? FrameLayout.LayoutParams` and set `gravity = Gravity.TOP`). Duration is a fixed 5000 ms (`SUCCESS_META_DURATION_MS`) — longer than `LENGTH_LONG` (~3.5 s) so the user has time to read the cost, but still self-dismissing.
+
+Strings: `label_alt_text_provider` ("Provider: %1$s") and `label_alt_text_cost` ("Cost: %1$s").
 
 ### Cancellation
 
@@ -216,6 +235,8 @@ All English; translatable via Weblate.
 | `error_alt_text_server` | Server error (HTTP %1$d) |
 | `error_alt_text_network` | Could not connect |
 | `error_alt_text_not_configured` | Configure alt text generation in Settings |
+| `label_alt_text_provider` | Provider: %1$s |
+| `label_alt_text_cost` | Cost: %1$s |
 
 ## Error handling
 
@@ -241,6 +262,7 @@ The existing description text is never modified on failure or cancellation.
 - Empty response content produces `EmptyResponseException`.
 - Base-URL joining with and without trailing slash both produce `/v1/chat/completions`.
 - `isConfigured()` returns false when api key is blank, false when model is blank, true when both set.
+- `usage.cost` and top-level `provider` are surfaced on `GenerationResult` when present in the response, and left null when absent.
 
 Tests target `internal suspend fun generateFromBytes(jpegBytes: ByteArray)` directly, bypassing the Glide/`Bitmap` pipeline. The `resizeIfNeeded` math is not unit-tested (would need Robolectric); it is verified during manual smoke testing.
 

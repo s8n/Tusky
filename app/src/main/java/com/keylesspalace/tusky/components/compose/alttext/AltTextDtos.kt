@@ -44,8 +44,13 @@ internal data class ImageUrl(val url: String)
 @JsonClass(generateAdapter = true)
 internal data class ChatCompletionResponse(
     val choices: List<Choice>?,
-    val error: ApiError?
+    val error: ApiError?,
+    val usage: Usage? = null,
+    val provider: String? = null
 )
+
+@JsonClass(generateAdapter = true)
+internal data class Usage(val cost: Double? = null)
 
 @JsonClass(generateAdapter = true)
 internal data class Choice(val message: ResponseMessage?)

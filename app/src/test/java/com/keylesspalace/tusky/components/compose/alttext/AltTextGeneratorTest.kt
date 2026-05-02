@@ -53,7 +53,7 @@ class AltTextGeneratorTest {
 
         val result = generator.generateFromBytes(sampleJpeg)
         assertTrue(result.isSuccess)
-        assertEquals("a cat", result.getOrNull())
+        assertEquals("a cat", result.getOrNull()?.text)
 
         val req = server.takeRequest()
         assertEquals("/v1/chat/completions", req.url.encodedPath)
@@ -77,7 +77,35 @@ class AltTextGeneratorTest {
         )
 
         val result = generator.generateFromBytes(sampleJpeg)
-        assertEquals("hello world", result.getOrNull())
+        assertEquals("hello world", result.getOrNull()?.text)
+    }
+
+    @Test
+    fun `success surfaces usage cost and provider when present`() = runTest {
+        server.enqueue(
+            MockResponse(
+                body = """{
+                    "choices":[{"message":{"content":"a cat"}}],
+                    "usage":{"cost":0.00042},
+                    "provider":"OpenAI"
+                }"""
+            )
+        )
+
+        val result = generator.generateFromBytes(sampleJpeg).getOrNull()
+        assertEquals("a cat", result?.text)
+        assertEquals(0.00042, result?.cost!!, 1e-9)
+        assertEquals("OpenAI", result.provider)
+    }
+
+    @Test
+    fun `success leaves cost and provider null when not in response`() = runTest {
+        server.enqueue(MockResponse(body = """{"choices":[{"message":{"content":"a cat"}}]}"""))
+
+        val result = generator.generateFromBytes(sampleJpeg).getOrNull()
+        assertEquals("a cat", result?.text)
+        assertEquals(null, result?.cost)
+        assertEquals(null, result?.provider)
     }
 
     @Test

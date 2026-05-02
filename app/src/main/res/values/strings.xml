@@ -1036,4 +1036,6 @@
     <string name="error_alt_text_server">Server error (HTTP %1$d)</string>
     <string name="error_alt_text_network">Could not connect</string>
     <string name="error_alt_text_not_configured">Configure alt text generation in Settings</string>
+    <string name="label_alt_text_provider">Provider: %1$s</string>
+    <string name="label_alt_text_cost">Cost: %1$s</string>
 </resources>

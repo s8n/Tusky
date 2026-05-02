@@ -21,9 +21,11 @@ import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.core.os.bundleOf
@@ -43,6 +45,7 @@ import com.keylesspalace.tusky.databinding.DialogImageDescriptionBinding
 import com.keylesspalace.tusky.util.getParcelableCompat
 import com.keylesspalace.tusky.util.hide
 import dagger.hilt.android.AndroidEntryPoint
+import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -162,8 +165,10 @@ class CaptionDialog : DialogFragment() {
             try {
                 val result = altTextGenerator.generate(uri)
                 if (isAdded) {
-                    result.onSuccess { binding.imageDescriptionText.setText(it) }
-                        .onFailure { showError(it) }
+                    result.onSuccess {
+                        binding.imageDescriptionText.setText(it.text)
+                        showSuccessMeta(it)
+                    }.onFailure { showError(it) }
                 }
             } catch (_: CancellationException) {
                 // user cancelled — silent, just restore UI
@@ -171,6 +176,33 @@ class CaptionDialog : DialogFragment() {
                 if (isAdded) restoreUi(okButton, cancelButton, neutralButton, originalCancelText)
             }
         }
+    }
+
+    private fun showSuccessMeta(result: AltTextGenerator.GenerationResult) {
+        val parts = mutableListOf<String>()
+        result.provider?.takeIf { it.isNotBlank() }?.let { parts.add(getString(R.string.label_alt_text_provider, it)) }
+        formatCost(result.cost)?.let { parts.add(getString(R.string.label_alt_text_cost, it)) }
+        if (parts.isEmpty()) return
+        val snackbar = Snackbar.make(binding.root, parts.joinToString(" · "), SUCCESS_META_DURATION_MS)
+        // Anchor at the top of the dialog. Dialog content is hosted in a FrameLayout, so the
+        // Snackbar's layout params will be FrameLayout.LayoutParams; setting gravity = TOP slides
+        // it down from the top instead of the default bottom edge.
+        (snackbar.view.layoutParams as? FrameLayout.LayoutParams)?.let {
+            it.gravity = Gravity.TOP
+            snackbar.view.layoutParams = it
+        }
+        snackbar.show()
+    }
+
+    private fun formatCost(value: Double?): String? {
+        if (value == null || !value.isFinite()) return null
+        if (value == 0.0) return "$0"
+        val digits = when {
+            value >= 0.01 -> 4
+            value >= 0.001 -> 5
+            else -> 6
+        }
+        return "$" + String.format(Locale.ROOT, "%.${digits}f", value)
     }
 
     private fun showError(throwable: Throwable) {
@@ -293,5 +325,6 @@ class CaptionDialog : DialogFragment() {
         private const val LOCAL_ID_ARG = "local_id"
         private const val DESCRIPTION_LIMIT_ARG = "description_limit"
         private const val IS_IMAGE_ARG = "is_image"
+        private const val SUCCESS_META_DURATION_MS = 5000
     }
 }

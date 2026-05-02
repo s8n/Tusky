@@ -48,7 +48,7 @@ class AltTextGenerator @Inject constructor(
         return key.isNotBlank() && model.isNotBlank()
     }
 
-    suspend fun generate(imageUri: Uri): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun generate(imageUri: Uri): Result<GenerationResult> = withContext(Dispatchers.IO) {
         try {
             val bytes = loadAndEncode(imageUri)
             generateFromBytes(bytes)
@@ -60,7 +60,7 @@ class AltTextGenerator @Inject constructor(
     }
 
     @androidx.annotation.VisibleForTesting
-    internal suspend fun generateFromBytes(jpegBytes: ByteArray): Result<String> {
+    internal suspend fun generateFromBytes(jpegBytes: ByteArray): Result<GenerationResult> {
         val key = prefs.getString(PrefKeys.ALT_TEXT_API_KEY, "").orEmpty()
         val model = prefs.getString(PrefKeys.ALT_TEXT_MODEL, "").orEmpty()
         val baseUrl = prefs.getString(PrefKeys.ALT_TEXT_BASE_URL, "")
@@ -108,7 +108,7 @@ class AltTextGenerator @Inject constructor(
         }
     }
 
-    private fun handleResponse(response: Response): Result<String> {
+    private fun handleResponse(response: Response): Result<GenerationResult> {
         val bodyString = response.body?.string().orEmpty()
         val parsed = runCatching {
             moshi.adapter(ChatCompletionResponse::class.java).fromJson(bodyString)
@@ -127,7 +127,13 @@ class AltTextGenerator @Inject constructor(
         return if (text.isEmpty()) {
             Result.failure(EmptyResponseException())
         } else {
-            Result.success(text)
+            Result.success(
+                GenerationResult(
+                    text = text,
+                    cost = parsed.usage?.cost,
+                    provider = parsed.provider
+                )
+            )
         }
     }
 
@@ -175,6 +181,12 @@ class AltTextGenerator @Inject constructor(
         val newH = (bitmap.height * scale).toInt().coerceAtLeast(1)
         return Bitmap.createScaledBitmap(bitmap, newW, newH, true)
     }
+
+    data class GenerationResult(
+        val text: String,
+        val cost: Double? = null,
+        val provider: String? = null
+    )
 
     class NotConfiguredException : Exception()
     class ImageLoadException(cause: Throwable) : Exception(cause)
